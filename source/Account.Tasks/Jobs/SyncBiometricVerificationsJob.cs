@@ -3,34 +3,33 @@ using Account.Domain.Enums;
 using Account.Domain.Framework.Layers.Data.Repositories;
 using Account.Domain.Providers;
 using Account.Domain.Queries.Biometrics;
+using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Account.Tasks.Jobs
 {
     public class SyncBiometricVerificationsJob : IScheduledJob
     {
-        private readonly IBiometricVerificationQuery _query;
-        private readonly IRepository _repository;
-        private readonly IBiometricProvider _provider;
+        private readonly IServiceProvider _serviceProvider;
 
-        public SyncBiometricVerificationsJob(
-            IBiometricVerificationQuery query,
-            IRepository repository,
-            IBiometricProvider provider)
+        public SyncBiometricVerificationsJob(IServiceProvider serviceProvider)
         {
-            _query = query;
-            _repository = repository;
-            _provider = provider;
+            _serviceProvider = serviceProvider;
         }
 
         public string Schedule => "0 */15 * * * *";
 
         public async Task DoWorkAsync()
         {
+            // Criar um scope para resolver serviços scoped
+            using var scope = _serviceProvider.CreateScope();
+            var query = scope.ServiceProvider.GetRequiredService<IBiometricVerificationQuery>();
+            var repository = scope.ServiceProvider.GetRequiredService<IRepository>();
+            var provider = scope.ServiceProvider.GetRequiredService<IBiometricProvider>();
+
             // Busca todas as verificações pendentes
-            var pendingVerifications = await _query.GetAllPending();
+            var pendingVerifications = await query.GetAllPending();
             
             var aggregate = new BiometricVerificationAggregate();
 
@@ -39,7 +38,7 @@ namespace Account.Tasks.Jobs
                 try
                 {
                     // Consulta o provedor novamente
-                    var providerResponse = await _provider.GetByReference(verification.Reference);
+                    var providerResponse = await provider.GetByReference(verification.Reference);
                     var newStatus = ConvertProviderStatusToDomainStatus(providerResponse.Status);
 
                     // Se o status mudou de PENDING para um estado final, atualiza
@@ -49,7 +48,7 @@ namespace Account.Tasks.Jobs
                         verification.ResultDescription = GetResultDescription(newStatus);
                         verification.UpdatedAt = DateTime.UtcNow;
 
-                        await _repository.UpdateAsync(verification);
+                        await repository.UpdateAsync(verification);
                     }
                 }
                 catch (Exception)
