@@ -1,0 +1,73 @@
+using System;
+using System.ComponentModel.DataAnnotations;
+using System.Threading;
+using System.Threading.Tasks;
+using Account.Domain.Aggregates.Biometrics;
+using Account.Domain.Entities.Biometrics;
+using Account.Domain.Enums;
+using Account.Domain.Framework.Layers.Data.Repositories;
+using Account.Domain.Framework.Layers.Domain.Command;
+using Account.Domain.Framework.Layers.Domain.Validations;
+using Account.Domain.Providers;
+using Account.Domain.Queries.Biometrics;
+using Account.Domain.Responses;
+
+namespace Account.Domain.Commands.Biometrics
+{
+    public class ProcessBiometricVerificationCommand : IRequest<BiometricVerificationResponse>
+    {
+        public ProcessBiometricVerificationRequest Request { get; }
+
+        public ProcessBiometricVerificationCommand(ProcessBiometricVerificationRequest request)
+        {
+            Request = request;
+        }
+
+        public class ProcessBiometricVerificationRequest
+        {
+            [Required(ErrorMessage = "Campo obrigatório")]
+            public string Reference { get; set; }
+        }
+    }
+
+    public class ProcessBiometricVerificationCommandHandler : CommandHandlerBase<BiometricVerification, ProcessBiometricVerificationCommand, BiometricVerificationResponse, BiometricVerificationAggregate>
+    {
+        private readonly IBiometricVerificationQuery _query;
+        private readonly IRepository _repository;
+        private readonly IBiometricProvider _provider;
+
+        public ProcessBiometricVerificationCommandHandler(
+            IServiceProvider serviceProvider,
+            IBiometricVerificationQuery query,
+            IRepository repository,
+            IBiometricProvider provider) : base(serviceProvider)
+        {
+            _query = query;
+            _repository = repository;
+            _provider = provider;
+        }
+
+        protected override async Task<CommandHandlerResponse<BiometricVerification>> HandleRequest(ProcessBiometricVerificationCommand command, BiometricVerificationAggregate aggregate, CancellationToken cancellationToken)
+        {
+            if (command?.Request == null || string.IsNullOrWhiteSpace(command.Request.Reference))
+                throw new BusinessException("Referência da verificação é obrigatória.");
+
+            var current = await _query.GetByReference(command.Request.Reference);
+            await _provider.GetByReference(command.Request.Reference);
+
+            if (current == null)
+            {
+                current = BiometricVerification.New();
+                current.Reference = command.Request.Reference;
+                current.Status = BiometricVerificationStatus.Pending;
+            }
+
+            return CommandHandlerResponse<BiometricVerification>.UpdateResult(current.Id, current);
+        }
+
+        protected override BiometricVerificationResponse Map(BiometricVerification entity)
+        {
+            return BiometricVerificationResponse.From(entity);
+        }
+    }
+}
