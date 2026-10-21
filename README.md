@@ -1,4 +1,9 @@
-# Account Service — Biometria facial
+# Desafio Engeneharia Juvo
+
+Bem vindo(a) a etapa de entrevista técnica da Juvo. A seguir você terá uma descrição sobre esse projeto e uma breve explicação sobre o setup básico. Após o setup temos a seção com o desafio. 
+Boa sorte e nos vemos na entrevista!
+
+## O que é este projeto? 
 
 Serviço de contas responsável por acompanhar o resultado de verificações de biometria facial feitas em um provedor externo.
 
