@@ -10,10 +10,10 @@ using Account.Domain.Framework.Layers.Data.UnitOfWork;
 using Account.Domain.Framework.Layers.Domain.Command;
 using Account.Domain.Framework.Layers.Domain.Validations;
 using Account.Domain.Providers;
+using Account.Tasks.Jobs;
 using Account.Domain.Queries.Biometrics;
 using Account.Domain.Responses;
 using Account.Domain.Services;
-using Account.Tasks.Jobs;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,20 +24,20 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddControllers();
+builder.Services.AddLogging();
 
 builder.Services.AddSingleton<BiometricVerificationStore>();
 builder.Services.AddScoped<IUnitOfWork, InMemoryUnitOfWork>();
 builder.Services.AddScoped<IRepository, Repository>();
 builder.Services.AddScoped<IBiometricVerificationQuery, BiometricVerificationQuery>();
-builder.Services.AddScoped<IBiometricProvider, FakeBiometricProvider>();
+builder.Services.AddScoped<IBiometricProvider, StatefulFakeBiometricProvider>();
 builder.Services.AddSingleton<ILoanResources, InMemoryLoanResources>();
 builder.Services.AddScoped<IMediator, Mediator>();
 builder.Services.AddScoped<IRequestHandler<ProcessBiometricVerificationCommand, BiometricVerificationResponse>, ProcessBiometricVerificationCommandHandler>();
-builder.Services.AddSingleton<IScheduledJob, SyncBiometricVerificationsJob>();
+builder.Services.AddHostedService<BiometricSyncBackgroundService>();
 
 var app = builder.Build();
 
-// Middleware para tratamento de erros
 app.Use(async (context, next) =>
 {
     try

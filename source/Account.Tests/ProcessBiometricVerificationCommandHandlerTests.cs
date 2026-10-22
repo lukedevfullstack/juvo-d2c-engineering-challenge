@@ -7,10 +7,6 @@ using Account.Domain.Framework.Layers.Domain.Validations;
 using Account.Domain.Providers;
 using Account.Domain.Queries.Biometrics;
 using Moq;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
 using static Account.Domain.Commands.Biometrics.ProcessBiometricVerificationCommand;
 
 namespace Account.Tests

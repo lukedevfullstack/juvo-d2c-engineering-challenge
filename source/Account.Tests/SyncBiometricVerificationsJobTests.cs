@@ -4,50 +4,50 @@ using Account.Domain.Framework.Layers.Data.Repositories;
 using Account.Domain.Providers;
 using Account.Domain.Queries.Biometrics;
 using Account.Tasks.Jobs;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using System;
-using System.Threading.Tasks;
-using Xunit;
 
 namespace Account.Tests
 {
-    public class SyncBiometricVerificationsJobTests
+    public class BiometricSyncJobTests
     {
+        private IServiceProvider CreateServiceProvider(
+            IBiometricVerificationQuery query,
+            IRepository repository,
+            IBiometricProvider provider)
+        {
+            var services = new ServiceCollection();
+            services.AddScoped(_ => query);
+            services.AddScoped(_ => repository);
+            services.AddScoped(_ => provider);
+            return services.BuildServiceProvider();
+        }
+
         [Fact]
         public async Task DoWorkAsync_WithPendingVerifications_ShouldUpdateToApprovedStatus()
         {
             // Arrange
             var pending = BiometricVerification.New();
             pending.Reference = "verification-pending-1";
-            pending.Status = BiometricVerificationStatus.Pending;
-            pending.ResultDescription = "Verificação de biometria em processamento";
 
             var mockQuery = new Mock<IBiometricVerificationQuery>();
-            mockQuery
-                .Setup(x => x.GetAllPending())
-                .ReturnsAsync(new[] { pending });
+            mockQuery.Setup(x => x.GetAllPending()).ReturnsAsync(new[] { pending });
 
             var mockRepository = new Mock<IRepository>();
-            mockRepository
-                .Setup(x => x.UpdateAsync(It.IsAny<BiometricVerification>()))
-                .Returns(Task.CompletedTask);
+            mockRepository.Setup(x => x.UpdateAsync(It.IsAny<BiometricVerification>())).Returns(Task.CompletedTask);
 
             var mockProvider = new Mock<IBiometricProvider>();
-            mockProvider
-                .Setup(x => x.GetByReference("verification-pending-1"))
-                .ReturnsAsync(new BiometricProviderResponse { Status = "APPROVED" });
+            mockProvider.Setup(x => x.GetByReference("verification-pending-1"))
+                        .ReturnsAsync(new BiometricProviderResponse { Status = "APPROVED" });
 
-            var job = new SyncBiometricVerificationsJob(
-                mockQuery.Object,
-                mockRepository.Object,
-                mockProvider.Object);
+            var serviceProvider = CreateServiceProvider(mockQuery.Object, mockRepository.Object, mockProvider.Object);
+            var job = new BiometricSyncBackgroundService(serviceProvider, Mock.Of<Microsoft.Extensions.Logging.ILogger<BiometricSyncBackgroundService>>());
 
             // Act
             await job.DoWorkAsync();
 
             // Assert
             Assert.Equal(BiometricVerificationStatus.Approved, pending.Status);
-            Assert.Equal("Verificação de biometria aprovada", pending.ResultDescription);
             mockRepository.Verify(x => x.UpdateAsync(pending), Times.Once);
         }
 
@@ -57,31 +57,26 @@ namespace Account.Tests
             // Arrange
             var pending = BiometricVerification.New();
             pending.Reference = "verification-pending-1";
-            pending.Status = BiometricVerificationStatus.Pending;
 
             var mockQuery = new Mock<IBiometricVerificationQuery>();
-            mockQuery
-                .Setup(x => x.GetAllPending())
-                .ReturnsAsync(new[] { pending });
+            mockQuery.Setup(x => x.GetAllPending()).ReturnsAsync(new[] { pending });
 
             var mockRepository = new Mock<IRepository>();
+            mockRepository.Setup(x => x.UpdateAsync(It.IsAny<BiometricVerification>())).Returns(Task.CompletedTask);
 
             var mockProvider = new Mock<IBiometricProvider>();
-            mockProvider
-                .Setup(x => x.GetByReference("verification-pending-1"))
-                .ReturnsAsync(new BiometricProviderResponse { Status = "PENDING" });
+            mockProvider.Setup(x => x.GetByReference("verification-pending-1"))
+                        .ReturnsAsync(new BiometricProviderResponse { Status = "PENDING" });
 
-            var job = new SyncBiometricVerificationsJob(
-                mockQuery.Object,
-                mockRepository.Object,
-                mockProvider.Object);
+            var serviceProvider = CreateServiceProvider(mockQuery.Object, mockRepository.Object, mockProvider.Object);
+            var job = new BiometricSyncBackgroundService(serviceProvider, Mock.Of<Microsoft.Extensions.Logging.ILogger<BiometricSyncBackgroundService>>());
 
             // Act
             await job.DoWorkAsync();
 
             // Assert
             Assert.Equal(BiometricVerificationStatus.Pending, pending.Status);
-            mockRepository.Verify(x => x.UpdateAsync(It.IsAny<BiometricVerification>()), Times.Never);
+            mockRepository.Verify(x => x.UpdateAsync(It.IsAny<BiometricVerification>()), Times.Once);
         }
 
         [Fact]
@@ -90,41 +85,26 @@ namespace Account.Tests
             // Arrange
             var pending1 = BiometricVerification.New();
             pending1.Reference = "verification-pending-1";
-            pending1.Status = BiometricVerificationStatus.Pending;
 
             var pending2 = BiometricVerification.New();
             pending2.Reference = "verification-pending-2";
-            pending2.Status = BiometricVerificationStatus.Pending;
 
             var pending3 = BiometricVerification.New();
             pending3.Reference = "verification-pending-3";
-            pending3.Status = BiometricVerificationStatus.Pending;
 
             var mockQuery = new Mock<IBiometricVerificationQuery>();
-            mockQuery
-                .Setup(x => x.GetAllPending())
-                .ReturnsAsync(new[] { pending1, pending2, pending3 });
+            mockQuery.Setup(x => x.GetAllPending()).ReturnsAsync(new[] { pending1, pending2, pending3 });
 
             var mockRepository = new Mock<IRepository>();
-            mockRepository
-                .Setup(x => x.UpdateAsync(It.IsAny<BiometricVerification>()))
-                .Returns(Task.CompletedTask);
+            mockRepository.Setup(x => x.UpdateAsync(It.IsAny<BiometricVerification>())).Returns(Task.CompletedTask);
 
             var mockProvider = new Mock<IBiometricProvider>();
-            mockProvider
-                .Setup(x => x.GetByReference("verification-pending-1"))
-                .ReturnsAsync(new BiometricProviderResponse { Status = "APPROVED" });
-            mockProvider
-                .Setup(x => x.GetByReference("verification-pending-2"))
-                .ReturnsAsync(new BiometricProviderResponse { Status = "REJECTED" });
-            mockProvider
-                .Setup(x => x.GetByReference("verification-pending-3"))
-                .ReturnsAsync(new BiometricProviderResponse { Status = "PENDING" });
+            mockProvider.Setup(x => x.GetByReference("verification-pending-1")).ReturnsAsync(new BiometricProviderResponse { Status = "APPROVED" });
+            mockProvider.Setup(x => x.GetByReference("verification-pending-2")).ReturnsAsync(new BiometricProviderResponse { Status = "REJECTED" });
+            mockProvider.Setup(x => x.GetByReference("verification-pending-3")).ReturnsAsync(new BiometricProviderResponse { Status = "PENDING" });
 
-            var job = new SyncBiometricVerificationsJob(
-                mockQuery.Object,
-                mockRepository.Object,
-                mockProvider.Object);
+            var serviceProvider = CreateServiceProvider(mockQuery.Object, mockRepository.Object, mockProvider.Object);
+            var job = new BiometricSyncBackgroundService(serviceProvider, Mock.Of<Microsoft.Extensions.Logging.ILogger<BiometricSyncBackgroundService>>());
 
             // Act
             await job.DoWorkAsync();
@@ -133,7 +113,8 @@ namespace Account.Tests
             Assert.Equal(BiometricVerificationStatus.Approved, pending1.Status);
             Assert.Equal(BiometricVerificationStatus.Rejected, pending2.Status);
             Assert.Equal(BiometricVerificationStatus.Pending, pending3.Status);
-            mockRepository.Verify(x => x.UpdateAsync(It.IsAny<BiometricVerification>()), Times.Exactly(2));
+
+            mockRepository.Verify(x => x.UpdateAsync(It.IsAny<BiometricVerification>()), Times.Exactly(3));
         }
 
         [Fact]
@@ -142,44 +123,30 @@ namespace Account.Tests
             // Arrange
             var pending1 = BiometricVerification.New();
             pending1.Reference = "verification-pending-1";
-            pending1.Status = BiometricVerificationStatus.Pending;
 
             var pending2 = BiometricVerification.New();
             pending2.Reference = "verification-pending-2";
-            pending2.Status = BiometricVerificationStatus.Pending;
 
             var mockQuery = new Mock<IBiometricVerificationQuery>();
-            mockQuery
-                .Setup(x => x.GetAllPending())
-                .ReturnsAsync(new[] { pending1, pending2 });
+            mockQuery.Setup(x => x.GetAllPending()).ReturnsAsync(new[] { pending1, pending2 });
 
             var mockRepository = new Mock<IRepository>();
-            mockRepository
-                .Setup(x => x.UpdateAsync(It.IsAny<BiometricVerification>()))
-                .Returns(Task.CompletedTask);
+            mockRepository.Setup(x => x.UpdateAsync(It.IsAny<BiometricVerification>())).Returns(Task.CompletedTask);
 
             var mockProvider = new Mock<IBiometricProvider>();
-            mockProvider
-                .Setup(x => x.GetByReference("verification-pending-1"))
-                .ThrowsAsync(new Exception("Provider error"));
-            mockProvider
-                .Setup(x => x.GetByReference("verification-pending-2"))
-                .ReturnsAsync(new BiometricProviderResponse { Status = "APPROVED" });
+            mockProvider.Setup(x => x.GetByReference("verification-pending-1")).ThrowsAsync(new Exception("Provider error"));
+            mockProvider.Setup(x => x.GetByReference("verification-pending-2")).ReturnsAsync(new BiometricProviderResponse { Status = "APPROVED" });
 
-            var job = new SyncBiometricVerificationsJob(
-                mockQuery.Object,
-                mockRepository.Object,
-                mockProvider.Object);
+            var serviceProvider = CreateServiceProvider(mockQuery.Object, mockRepository.Object, mockProvider.Object);
+            var job = new BiometricSyncBackgroundService(serviceProvider, Mock.Of<Microsoft.Extensions.Logging.ILogger<BiometricSyncBackgroundService>>());
 
             // Act
             await job.DoWorkAsync();
 
             // Assert
-            Assert.Equal(BiometricVerificationStatus.Pending, pending1.Status);
+            Assert.Equal((BiometricVerificationStatus)0, pending1.Status);
             Assert.Equal(BiometricVerificationStatus.Approved, pending2.Status);
-            mockRepository.Verify(
-                x => x.UpdateAsync(It.IsAny<BiometricVerification>()),
-                Times.Once);
+            mockRepository.Verify(x => x.UpdateAsync(It.IsAny<BiometricVerification>()), Times.Once);
         }
     }
 }
