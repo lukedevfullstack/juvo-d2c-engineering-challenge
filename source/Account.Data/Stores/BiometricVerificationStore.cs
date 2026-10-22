@@ -1,6 +1,8 @@
 using Account.Domain.Entities.Biometrics;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Account.Data.Stores
 {
@@ -31,6 +33,11 @@ namespace Account.Data.Stores
 
             _byId.TryGetValue(id, out var verification);
             return verification;
+        }
+
+        public IEnumerable<BiometricVerification> GetAll()
+        {
+            return _byId.Values.AsEnumerable();
         }
     }
 }

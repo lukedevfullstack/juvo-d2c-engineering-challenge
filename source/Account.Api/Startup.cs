@@ -13,7 +13,6 @@ using Account.Domain.Providers;
 using Account.Domain.Queries.Biometrics;
 using Account.Domain.Responses;
 using Account.Domain.Services;
-using Account.Tasks.Jobs;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -45,7 +44,6 @@ namespace Account.Api
             services.AddSingleton<ILoanResources, InMemoryLoanResources>();
             services.AddScoped<IMediator, Mediator>();
             services.AddScoped<IRequestHandler<ProcessBiometricVerificationCommand, BiometricVerificationResponse>, ProcessBiometricVerificationCommandHandler>();
-            services.AddSingleton<IScheduledJob, SyncBiometricVerificationsJob>();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)

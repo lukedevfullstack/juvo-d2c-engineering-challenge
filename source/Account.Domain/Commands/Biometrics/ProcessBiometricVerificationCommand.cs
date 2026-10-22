@@ -52,22 +52,59 @@ namespace Account.Domain.Commands.Biometrics
             if (command?.Request == null || string.IsNullOrWhiteSpace(command.Request.Reference))
                 throw new BusinessException("Referência da verificação é obrigatória.");
 
-            var current = await _query.GetByReference(command.Request.Reference);
-            await _provider.GetByReference(command.Request.Reference);
+            var reference = command.Request.Reference;
+            var current = await _query.GetByReference(reference);
 
-            if (current == null)
-            {
-                current = BiometricVerification.New();
-                current.Reference = command.Request.Reference;
-                current.Status = BiometricVerificationStatus.Pending;
-            }
+            // Se já existe verificação, retorna o estado atual
+            if (current != null)
+                return CommandHandlerResponse<BiometricVerification>.UpdateResult(current.Id, current);
 
-            return CommandHandlerResponse<BiometricVerification>.UpdateResult(current.Id, current);
+            // Consulta o provedor para obter o status
+            var providerResponse = await _provider.GetByReference(reference);
+            
+            // Converte a resposta do provedor para o modelo de domínio
+            var status = ConvertProviderStatusToDomainStatus(providerResponse.Status);
+            
+            // Cria nova verificação
+            var verification = BiometricVerification.New();
+            verification.Reference = reference;
+            verification.Status = status;
+            verification.ResultDescription = GetResultDescription(status);
+
+            // Persiste usando o aggregate
+            aggregate.ApplyResult(verification, status, verification.ResultDescription);
+
+            // Salva no repositório
+            await _repository.AddAsync(verification);
+
+            return CommandHandlerResponse<BiometricVerification>.CreateResult(verification.Id, verification);
         }
 
         protected override BiometricVerificationResponse Map(BiometricVerification entity)
         {
             return BiometricVerificationResponse.From(entity);
+        }
+
+        private BiometricVerificationStatus ConvertProviderStatusToDomainStatus(string providerStatus)
+        {
+            return providerStatus switch
+            {
+                "APPROVED" => BiometricVerificationStatus.Approved,
+                "REJECTED" => BiometricVerificationStatus.Rejected,
+                "PENDING" => BiometricVerificationStatus.Pending,
+                _ => BiometricVerificationStatus.Pending
+            };
+        }
+
+        private string GetResultDescription(BiometricVerificationStatus status)
+        {
+            return status switch
+            {
+                BiometricVerificationStatus.Approved => "Verificação de biometria aprovada",
+                BiometricVerificationStatus.Rejected => "Verificação de biometria reprovada",
+                BiometricVerificationStatus.Pending => "Verificação de biometria em processamento",
+                _ => null
+            };
         }
     }
 }

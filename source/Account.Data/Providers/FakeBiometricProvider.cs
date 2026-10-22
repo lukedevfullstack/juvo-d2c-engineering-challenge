@@ -1,5 +1,4 @@
 using Account.Domain.Providers;
-using System;
 using System.Threading.Tasks;
 
 namespace Account.Data.Providers
@@ -8,24 +7,23 @@ namespace Account.Data.Providers
     {
         public Task<BiometricProviderResponse> GetByReference(string reference)
         {
-            if (string.IsNullOrWhiteSpace(reference))
-                throw new ArgumentException("Reference is required.", nameof(reference));
+            string status = DetermineStatus(reference);
+            
+            return Task.FromResult(new BiometricProviderResponse
+            {
+                Status = status
+            });
+        }
 
-            var normalized = reference.ToLowerInvariant();
-
-            if (normalized.Contains("timeout"))
-                throw new TimeoutException("The biometric provider did not respond in time.");
-
-            if (normalized.Contains("approved"))
-                return Task.FromResult(new BiometricProviderResponse { Status = "APPROVED" });
-
-            if (normalized.Contains("rejected"))
-                return Task.FromResult(new BiometricProviderResponse { Status = "REJECTED" });
-
-            if (normalized.Contains("pending"))
-                return Task.FromResult(new BiometricProviderResponse { Status = "PENDING" });
-
-            return Task.FromResult(new BiometricProviderResponse { Status = "PENDING" });
+        private string DetermineStatus(string reference)
+        {
+            if (reference.Contains("approved", System.StringComparison.OrdinalIgnoreCase))
+                return "APPROVED";
+            
+            if (reference.Contains("rejected", System.StringComparison.OrdinalIgnoreCase))
+                return "REJECTED";
+            
+            return "PENDING";
         }
     }
 }
